@@ -81,7 +81,7 @@ class Daemon:
     def coin(self) -> str:
         return self._coin
 
-    async def capture(self, windows: int = 1):
+    async def capture(self, windows: int = 1) -> None:
         base = Daemon._get_timestamp()
         timestamps = [base + 900 * i for i in range(1, windows + 1)]
 
@@ -121,23 +121,23 @@ class Daemon:
 
             pass
 
-    async def close(self):
+    async def close(self) -> None:
         if self._socket:
             await self._socket.close()
         await self._session.close()
 
-    async def _reconnect(self):
+    async def _reconnect(self) -> None:
         if self._socket:
             await self._socket.close()
         self._socket = await connect(Daemon._PM_CLOB_ENDPOINT)
 
-    async def _subscribe(self, tokens: tuple[str, str]):
+    async def _subscribe(self, tokens: tuple[str, str]) -> None:
         await self._scribe(tokens, "subscribe")
 
-    async def _unsubscribe(self, tokens: tuple[str, str]):
+    async def _unsubscribe(self, tokens: tuple[str, str]) -> None:
         await self._scribe(tokens, "unsubscribe")
 
-    async def _scribe(self, tokens: tuple[str, str], operation: str):
+    async def _scribe(self, tokens: tuple[str, str], operation: str) -> None:
         if not self._socket:
             warn(f"unable to {operation} sinec there is no socket")
             return
