@@ -110,7 +110,7 @@ class Daemon:
                         data = orjson.loads(message)
                         await self._ingest.append(data)
                 except TimeoutError:
-                    info("timeout for {slug}, moving onto the next window")
+                    info(f"timeout for {slug}, moving onto the next window")
                     await self._ingest.flush()
                     await self._reconnect()
                     break
