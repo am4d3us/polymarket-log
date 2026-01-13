@@ -1,9 +1,19 @@
 import aiofiles, aiohttp, asyncio
-import orjson, os
+import orjson, os, time
+
+from websockets.asyncio.client import connect, ClientConnection
+from websockets.exceptions import ConnectionClosedError
 
 from pathlib import Path
 from typing import Any
-from websockets.asyncio.client import connect, ClientConnection
+
+
+def info(string: str):
+    print("[?]" + string)
+
+
+def warn(string: str):
+    print("[!]" + string)
 
 
 class Ingest:
@@ -68,10 +78,75 @@ class Daemon:
     async def capture(self, windows: int = 1):
         self._socket = await connect(Daemon._PM_CLOB_ENDPOINT)
 
+        base = Daemon._get_timestamp()
+        timestamps = [base + 900 * i for i in range(1, windows + 1)]
+
+        till_next = timestamps[0] - time.time_ns() // 10**9
+        info(f"sleeping till {till_next}")
+        await asyncio.sleep(till_next)
+
+        for i in range(windows):
+
+            slug = f"{self._coin}-updown-15m-{timestamps[i]}"
+            tokens = await self._get_tokens(slug)
+            self._ingest.name = slug
+
+            await self._subscribe(tokens)
+
+            run_for = timestamps[i] + 900 - time.time_ns() // 10**9
+            deadline = asyncio.get_running_loop().time() + run_for
+
+            info("will monitor {slug} for {run_for} seconds")
+
+            while True:
+                try:
+                    async with asyncio.timeout_at(deadline):
+                        message = await self._socket.recv()
+                        data = orjson.loads(message)
+                        await self._ingest.append(data)
+                except TimeoutError:
+                    info("timeout for {slug}, moving onto the next window")
+                    await self._ingest.flush()
+                    await self._reconnect()
+                    break
+                except ConnectionClosedError:
+                    warn(f"connection closed for {self._coin}, reconnecting")
+                    await self._reconnect()
+                    await self._subscribe(tokens)
+
+            pass
+
     async def close(self):
         if self._socket:
             await self._socket.close()
         await self._session.close()
+
+    async def _reconnect(self):
+        await self._socket.close()
+        self._socket = await connect(Daemon._PM_CLOB_ENDPOINT)
+
+    async def _subscribe(self, tokens: tuple[str, str]):
+        await self._scribe(tokens, "subscribe")
+
+    async def _unsubscribe(self, tokens: tuple[str, str]):
+        await self._scribe(tokens, "unsubscribe")
+
+    async def _scribe(self, tokens: tuple[str, str], operation: str):
+        if not self._socket:
+            return
+
+        await self._socket.send(
+            orjson.dumps({"assets_ids": tokens, "operation": operation})
+        )
+
+    async def _get_tokens(self, slug: str) -> tuple[str, str]:
+        async with self._session.request("GET", slug) as response:
+            return await response.json()["clobTokenIds"]
+
+    @staticmethod
+    def _get_timestamp() -> int:
+        timestamp = time.time_ns() // 10**9
+        return (timestamp // 900) * 900
 
 
 def main():
