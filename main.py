@@ -86,7 +86,7 @@ class Daemon:
         timestamps = [base + 900 * i for i in range(1, windows + 1)]
 
         till_next = timestamps[0] - time.time_ns() // 10**9
-        info(f"sleeping for {till_next} seconds till next window")
+        info(f"sleeping for {till_next} seconds till next {self.coin} window")
         await asyncio.sleep(till_next)
 
         self._socket = await connect(Daemon._PM_CLOB_ENDPOINT)
