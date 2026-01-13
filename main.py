@@ -1,8 +1,9 @@
 import aiofiles, aiohttp, asyncio
-import orjson, os, websockets
+import orjson, os
 
 from pathlib import Path
 from typing import Any
+from websockets.asyncio.client import connect, ClientConnection
 
 
 class Ingest:
@@ -52,6 +53,25 @@ class Ingest:
                 await file.write(os.linesep.encode())
 
         self.clear()
+
+
+class Daemon:
+    _PM_GAMMA_ENDPOINT = "https://gamma-api.polymarket.com/markets/slug/"
+    _PM_CLOB_ENDPOINT = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+
+    def __init__(self, coin: str, directory: str | None):
+        self._coin = coin
+        self._socket: ClientConnection | None = None
+        self._session = aiohttp.ClientSession(Daemon._PM_GAMMA_ENDPOINT)
+        self._ingest = Ingest(coin, directory)
+
+    async def capture(self, windows: int = 1):
+        self._socket = await connect(Daemon._PM_CLOB_ENDPOINT)
+
+    async def close(self):
+        if self._socket:
+            await self._socket.close()
+        await self._session.close()
 
 
 def main():
